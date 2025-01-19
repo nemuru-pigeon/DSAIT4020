@@ -1,5 +1,12 @@
 .idea/
+
 src/__pycache__
+
+# Data
+/data
 *.csv
 
+# .ipynb
 .ipynb_checkpoints/
+
+.env
