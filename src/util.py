@@ -10,26 +10,20 @@ def fill_nan_values(df_original):
     # Imputation strategy for each type of column
     for col in df.columns:
         if df[col].dtype == 'object':
-            # For categorical columns, fill NaN with the mode (most frequent value)
             df.fillna({col: df[col].mode()[0]}, inplace=True)
         elif col in ['age', 'age_o']:
-            # For age-related columns, fill NaN with the median, as age is typically not skewed
             df.fillna({col: df[col].median()}, inplace=True)
         elif col in ['pref_o_attractive', 'pref_o_sincere', 'pref_o_intelligence',
                      'pref_o_funny', 'pref_o_ambitious', 'pref_o_shared_interests']:
-            # For preferences, use mean as these are likely on a numerical scale
             df.fillna({col: df[col].mean()}, inplace=True)
         elif col in ['sports', 'tvsports', 'exercise', 'dining', 'museums', 'art', 'hiking',
                      'gaming', 'clubbing', 'reading', 'tv', 'theater', 'movies', 'concerts',
                      'music', 'shopping', 'yoga']:
-            # For activity interest scores, use mean to retain the overall distribution
             df.fillna({col: df[col].mean()}, inplace=True)
         elif col in ['like', 'guess_prob_liked', 'expected_happy_with_sd_people',
                      'expected_num_interested_in_me', 'expected_num_matches']:
-            # For subjective scores or expectations, use the mean
             df.fillna({col: df[col].mean()}, inplace=True)
         elif col in ['decision', 'match', 'met']:
-            # For binary columns, fill with 0, assuming no interaction/match is the default
             df.fillna({col: 0}, inplace=True)
         else:
             # For any other numeric columns, use mean as a general strategy
