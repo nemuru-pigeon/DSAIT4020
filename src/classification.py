@@ -8,11 +8,11 @@ from sklearn.metrics import classification_report, accuracy_score, roc_curve
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 
-from classification_experiment_settings import models, param_grids, required_columns, numeric_features, \
+from src.classification_experiment_settings import models, param_grids, required_columns, numeric_features, \
     categorical_features
-from dataloader import load_arff_to_dataframe
-from util import fill_nan_values
-from dashboard import Dashboard
+from src.dataloader import load_arff_to_dataframe
+from src.util import fill_nan_values
+from src.dashboard import Dashboard
 
 import os
 
@@ -46,7 +46,7 @@ def get_train_test_split(df: pd.DataFrame):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     return X_train, X_test, y_train, y_test
 
-def load_or_train_models(X_train, X_test, y_train, y_test):
+def load_or_train_models(X_train, X_test, y_train, y_test, preprocessor):
     # Check if saved models exist
     if os.path.exists(RESULTS_FILE) and os.path.exists(PREDS_FILE):
         print("Loading saved models...")
@@ -166,7 +166,8 @@ def load_or_train_models(X_train, X_test, y_train, y_test):
 
         return results, model_preds, learning_curves, validation_curves
 
-if __name__ == "__main__":
+
+def run_classification_experiment():
     setup_environment()
 
     df_data = load_and_preprocess_data('speeddating.arff')
@@ -179,7 +180,7 @@ if __name__ == "__main__":
         ]
     )
 
-    results, model_preds, learning_curves, validation_curves = load_or_train_models(X_train, X_test, y_train, y_test)
+    results, model_preds, learning_curves, validation_curves = load_or_train_models(X_train, X_test, y_train, y_test, preprocessor)
 
     # Dashboard
     print("Initializing dashboard...")

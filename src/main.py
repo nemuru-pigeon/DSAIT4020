@@ -1,12 +1,5 @@
 
-import signal
-import os
-from src.dashboard import Dashboard
-
+from src.classification import run_classification_experiment
 
 if __name__ == '__main__':
-    dashboard = Dashboard()
-    dashboard.define_layout()
-    dashboard.app.run_server(debug=True)
-
-    os.kill(os.getpid(), signal.SIGTERM)
+    run_classification_experiment()
