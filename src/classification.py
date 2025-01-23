@@ -1,6 +1,8 @@
+from matplotlib import pyplot as plt
+import numpy as np
 import pandas as pd
 import joblib
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import learning_curve, train_test_split, GridSearchCV, validation_curve
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import classification_report, accuracy_score, roc_curve
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -45,20 +47,21 @@ def get_train_test_split(df: pd.DataFrame):
     return X_train, X_test, y_train, y_test
 
 def load_or_train_models(X_train, X_test, y_train, y_test):
-    # For all models:
-    # setup the pipeline, apply grid search
-    # Store best_model, predictions on test data, y_scores, accuracy on test data, and the classification_report
     # Check if saved models exist
     if os.path.exists(RESULTS_FILE) and os.path.exists(PREDS_FILE):
         print("Loading saved models...")
         results = joblib.load(RESULTS_FILE)
         model_preds = joblib.load(PREDS_FILE)
-        return results, model_preds
+        learning_curves = joblib.load(os.path.join(MODEL_DIR, "learning_curves.joblib"))
+        validation_curves = joblib.load(os.path.join(MODEL_DIR, "validation_curves.joblib"))
+        return results, model_preds, learning_curves, validation_curves
     else:
         print("Training models...")
-        # Evaluate models
+        
         results = []
         model_preds = {}
+        learning_curves = {} 
+        validation_curves = {}  # Dictionary to store validation curve data
         cv_folds = 5
 
         for model_name, model in models.items():
@@ -72,7 +75,7 @@ def load_or_train_models(X_train, X_test, y_train, y_test):
             # Get grid search results
             best_model = grid_search.best_estimator_
             best_params = grid_search.best_params_
-            
+
             y_pred = best_model.predict(X_test)
             y_scores = best_model.predict_proba(X_test)[:, 1]
             acc = accuracy_score(y_test, y_pred)
@@ -87,6 +90,69 @@ def load_or_train_models(X_train, X_test, y_train, y_test):
 
             model_preds[model_name] = {'y_pred': y_pred, 'y_scores': y_scores}
 
+            # Compute learning curve
+            best_pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', best_model.named_steps['model'])])
+            train_sizes, train_scores, test_scores = learning_curve(
+                best_pipeline, X_train, y_train, cv=cv_folds, scoring='accuracy',
+                train_sizes=np.linspace(0.1, 1.0, 10), n_jobs=-1
+            )
+
+            learning_curves[model_name] = {
+                'train_sizes': train_sizes,
+                'train_scores': train_scores,
+                'test_scores': test_scores
+            }
+
+            # Compute validation curve with model-specific parameters
+            if model_name == 'Logistic Regression' or model_name == 'Support Vector Machine':
+                param_name = 'model__C'
+                param_range = np.logspace(-3, 3, 7)
+            elif model_name == 'Random Forest':
+                param_name = 'model__n_estimators'
+                param_range = np.array([10, 30, 50, 100, 200, 300])
+            elif model_name == 'Decision Tree':
+                param_name = 'model__max_depth'
+                param_range = np.array([1, 3, 5, 7, 9, 11, 13])
+            
+            train_scores_val, test_scores_val = validation_curve(
+                best_pipeline, X_train, y_train, 
+                param_name=param_name, 
+                param_range=param_range,
+                cv=cv_folds, 
+                scoring='accuracy', 
+                n_jobs=-1
+            )
+
+            # Store validation curve data
+            validation_curves[model_name] = {
+                'param_range': param_range,
+                'param_name': param_name,  # Store parameter name for plotting
+                'train_scores': train_scores_val,
+                'test_scores': test_scores_val
+            }
+
+            # Plot and save the learning curve
+            plt.figure()
+            plt.plot(train_sizes, np.mean(train_scores, axis=1), label="Training Score")
+            plt.plot(train_sizes, np.mean(test_scores, axis=1), label="Validation Score")
+            plt.xlabel("Training Size")
+            plt.ylabel("Accuracy")
+            plt.title(f"Learning Curve - {model_name}")
+            plt.legend()
+            plt.savefig(os.path.join(MODEL_DIR, f"{model_name}_learning_curve.png"))
+            plt.close()
+
+            # Plot and save the validation curve
+            plt.figure()
+            plt.semilogx(param_range, np.mean(train_scores_val, axis=1), label="Training Score")
+            plt.semilogx(param_range, np.mean(test_scores_val, axis=1), label="Validation Score")
+            plt.xlabel(f"Parameter {param_name.split('__')[1]}")  # Remove 'model__' prefix
+            plt.ylabel("Accuracy")
+            plt.title(f"Validation Curve - {model_name}")
+            plt.legend()
+            plt.savefig(os.path.join(MODEL_DIR, f"{model_name}_validation_curve.png"))
+            plt.close()
+
             # Save trained model
             model_path = os.path.join(MODEL_DIR, f"{model_name}.joblib")
             joblib.dump(best_model, model_path)
@@ -94,9 +160,11 @@ def load_or_train_models(X_train, X_test, y_train, y_test):
         # Save results
         joblib.dump(results, RESULTS_FILE)
         joblib.dump(model_preds, PREDS_FILE)
-        print("Models saved successfully.")
+        joblib.dump(learning_curves, os.path.join(MODEL_DIR, "learning_curves.joblib"))
+        joblib.dump(validation_curves, os.path.join(MODEL_DIR, "validation_curves.joblib"))
+        print("Models and learning curves saved successfully.")
 
-        return results, model_preds
+        return results, model_preds, learning_curves, validation_curves
 
 if __name__ == "__main__":
     setup_environment()
@@ -107,15 +175,15 @@ if __name__ == "__main__":
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), numeric_features),
-            ('cat', OneHotEncoder(), categorical_features)
+            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
         ]
     )
 
-    results, model_preds = load_or_train_models(X_train, X_test, y_train, y_test)
+    results, model_preds, learning_curves, validation_curves = load_or_train_models(X_train, X_test, y_train, y_test)
 
     # Dashboard
     print("Initializing dashboard...")
-    dash_app = Dashboard(results)
+    dash_app = Dashboard(results, learning_curves, validation_curves)
     
     print("Defining layout...")
     dash_app.define_layout(y_test, model_preds)
